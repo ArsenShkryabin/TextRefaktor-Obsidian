@@ -1,5 +1,5 @@
 import { Plugin, Editor, Notice, MarkdownView, Menu } from 'obsidian';
-import { DEFAULT_SETTINGS, PluginSettings, EnhancementMode, TextHistory } from './src/types';
+import { DEFAULT_SETTINGS, PluginSettings, EnhancementMode, TextHistory, ChatSettings, Chat } from './src/types';
 import { SettingsTab } from './src/settings/SettingsTab';
 import { EnhancementModal } from './src/ui/EnhancementModal';
 import { AIService } from './src/api/AIService';
@@ -9,14 +9,29 @@ export default class TextEnhancerPlugin extends Plugin {
 	settings: PluginSettings;
 	private aiService: AIService;
 	private textHistory: TextHistory | null = null;
+	private chatSettings: ChatSettings = {
+		chats: [],
+		currentChatId: null,
+		maxHistoryLength: 100
+	};
 
 	async onload() {
 		await this.loadSettings();
+		await this.loadChatSettings();
 		this.aiService = new AIService(this.settings);
 
 		// Регистрируем view для чата
 		this.registerView(CHAT_VIEW_TYPE, (leaf) => {
-			return new ChatPanel(leaf, this.settings, this.aiService);
+			return new ChatPanel(
+				leaf, 
+				this.settings, 
+				this.aiService,
+				this.chatSettings,
+				async (settings: ChatSettings) => {
+					this.chatSettings = settings;
+					await this.saveChatSettings();
+				}
+			);
 		});
 
 		// Добавляем вкладку настроек
@@ -263,6 +278,44 @@ export default class TextEnhancerPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async loadChatSettings() {
+		const data = await this.loadData();
+		if (data && data.chatSettings) {
+			this.chatSettings = Object.assign({
+				chats: [],
+				currentChatId: null,
+				maxHistoryLength: 100
+			}, data.chatSettings);
+		}
+	}
+
+	async saveChatSettings() {
+		// Загружаем текущие данные, чтобы не перезаписать другие настройки
+		const currentData = await this.loadData() || {};
+		// Объединяем все настройки
+		// Важно: создаем глубокую копию chatSettings, чтобы избежать проблем с ссылками
+		const chatSettingsCopy = {
+			chats: this.chatSettings.chats.map(chat => ({
+				id: chat.id,
+				title: chat.title,
+				messages: chat.messages.map(msg => ({
+					role: msg.role,
+					content: msg.content,
+					timestamp: msg.timestamp
+				})),
+				createdAt: chat.createdAt,
+				updatedAt: chat.updatedAt
+			})),
+			currentChatId: this.chatSettings.currentChatId,
+			maxHistoryLength: this.chatSettings.maxHistoryLength
+		};
+		
+		const allData = Object.assign({}, currentData, this.settings, {
+			chatSettings: chatSettingsCopy
+		});
+		await this.saveData(allData);
 	}
 }
 

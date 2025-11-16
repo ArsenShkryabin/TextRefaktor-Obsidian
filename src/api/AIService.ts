@@ -15,12 +15,12 @@ export class AIService {
 
 		const prompt = this.buildPrompt(text, mode);
 		
-		if (this.settings.apiProvider === 'openai' || this.settings.apiProvider === 'custom') {
+		if (this.settings.apiProvider === 'openai' || this.settings.apiProvider === 'custom' || this.settings.apiProvider === 'ollama') {
 			return this.callOpenAI(prompt);
 		}
 		
 		if (this.settings.apiProvider === 'anthropic') {
-			throw new Error('Провайдер Anthropic пока не поддерживается. Используйте OpenAI или Custom API.');
+			throw new Error('Провайдер Anthropic пока не поддерживается. Используйте OpenAI, Ollama или Custom API.');
 		}
 		
 		throw new Error(`Провайдер ${this.settings.apiProvider} не поддерживается`);
@@ -130,9 +130,9 @@ export class AIService {
 			throw new Error('API ключ не установлен');
 		}
 
-		// Для custom провайдера проверяем наличие URL
-		if (this.settings.apiProvider === 'custom' && !this.settings.apiUrl) {
-			throw new Error('Для Custom API необходимо указать URL');
+		// Для custom и ollama провайдеров проверяем наличие URL
+		if ((this.settings.apiProvider === 'custom' || this.settings.apiProvider === 'ollama') && !this.settings.apiUrl) {
+			throw new Error(`Для ${this.settings.apiProvider === 'ollama' ? 'Ollama' : 'Custom API'} необходимо указать URL`);
 		}
 
 		try {
@@ -199,65 +199,114 @@ export class AIService {
 		}
 	}
 
+	/**
+	 * Нормализует URL API, добавляя /chat/completions если нужно
+	 */
+	private normalizeApiUrl(url: string | undefined, provider: string): string {
+		if (!url) {
+			if (provider === 'ollama') {
+				throw new Error('Для Ollama необходимо указать URL. Например: http://localhost:11434/v1');
+			}
+			return 'https://api.openai.com/v1/chat/completions';
+		}
+
+		// Убираем завершающий слэш
+		url = url.trim().replace(/\/$/, '');
+
+		// Если URL не содержит /chat/completions, добавляем его
+		if (!url.includes('/chat/completions')) {
+			// Если URL заканчивается на /v1, добавляем /chat/completions
+			if (url.endsWith('/v1')) {
+				url = url + '/chat/completions';
+			} else if (!url.includes('/v1/')) {
+				// Если нет /v1/, добавляем /v1/chat/completions
+				url = url + '/v1/chat/completions';
+			} else {
+				// Если есть /v1/, но нет /chat/completions, добавляем
+				url = url + '/chat/completions';
+			}
+		}
+
+		return url;
+	}
+
 	private async callOpenAI(prompt: string): Promise<string> {
 		if (!this.settings.apiKey) {
 			throw new Error('API ключ не установлен. Пожалуйста, настройте его в настройках плагина.');
 		}
 
-		// Для custom провайдера проверяем наличие URL
-		if (this.settings.apiProvider === 'custom' && !this.settings.apiUrl) {
-			throw new Error('Для Custom API необходимо указать URL. Пожалуйста, настройте его в настройках плагина.');
+		// Для custom и ollama провайдеров проверяем наличие URL
+		if ((this.settings.apiProvider === 'custom' || this.settings.apiProvider === 'ollama') && !this.settings.apiUrl) {
+			throw new Error(`Для ${this.settings.apiProvider === 'ollama' ? 'Ollama' : 'Custom API'} необходимо указать URL. Пожалуйста, настройте его в настройках плагина.`);
 		}
 
-		const apiUrl = this.settings.apiProvider === 'custom' 
-			? this.settings.apiUrl 
-			: (this.settings.apiUrl || 'https://api.openai.com/v1/chat/completions');
+		// Нормализуем URL (добавляем /chat/completions если нужно)
+		const apiUrl = this.normalizeApiUrl(
+			this.settings.apiProvider === 'custom' || this.settings.apiProvider === 'ollama'
+				? this.settings.apiUrl
+				: this.settings.apiUrl,
+			this.settings.apiProvider
+		);
 
 		// Оптимизация параметров в зависимости от режима скорости
 		const optimizedParams = this.getOptimizedParams(prompt.length);
 
-		const response = await fetch(apiUrl!, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${this.settings.apiKey}`,
-			},
-			body: JSON.stringify({
-				model: this.settings.model,
-				messages: [
-					{
-						role: 'user',
-						content: prompt,
-					},
-				],
-				temperature: optimizedParams.temperature,
-				max_tokens: optimizedParams.maxTokens,
-			}),
-		});
+		try {
+			const response = await fetch(apiUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${this.settings.apiKey}`,
+				},
+				body: JSON.stringify({
+					model: this.settings.model,
+					messages: [
+						{
+							role: 'user',
+							content: prompt,
+						},
+					],
+					temperature: optimizedParams.temperature,
+					max_tokens: optimizedParams.maxTokens,
+				}),
+			});
 
-		if (!response.ok) {
-			const error = await response.json().catch(() => ({ error: { message: 'Неизвестная ошибка' } }));
-			throw new Error(`Ошибка API: ${error.error?.message || response.statusText}`);
-		}
+			if (!response.ok) {
+				const errorText = await response.text();
+				let error;
+				try {
+					error = JSON.parse(errorText);
+				} catch {
+					error = { error: { message: errorText || 'Неизвестная ошибка' } };
+				}
+				throw new Error(`Ошибка API (${response.status}): ${error.error?.message || error.message || response.statusText}`);
+			}
 
-		const data = await response.json();
-		
-		// Поддержка разных форматов ответа (OpenAI и совместимые API)
-		if (data.choices && data.choices[0]?.message?.content) {
-			return data.choices[0].message.content;
+			const data = await response.json();
+			
+			// Поддержка разных форматов ответа (OpenAI и совместимые API)
+			if (data.choices && data.choices[0]?.message?.content) {
+				return data.choices[0].message.content;
+			}
+			
+			// Альтернативный формат ответа
+			if (data.content) {
+				return data.content;
+			}
+			
+			// Если ответ в другом формате, возвращаем весь ответ как строку
+			if (data.text) {
+				return data.text;
+			}
+			
+			throw new Error('Неожиданный формат ответа от API. Проверьте формат ответа вашего API.');
+		} catch (error) {
+			// Улучшенная обработка ошибок для диагностики
+			if (error instanceof TypeError && error.message.includes('fetch')) {
+				throw new Error(`Ошибка подключения: Не удалось подключиться к ${apiUrl}. Проверьте:\n1. Правильность URL\n2. Доступность сервера\n3. Настройки CORS (если используется удаленный сервер)\n4. Сетевое подключение`);
+			}
+			throw error;
 		}
-		
-		// Альтернативный формат ответа
-		if (data.content) {
-			return data.content;
-		}
-		
-		// Если ответ в другом формате, возвращаем весь ответ как строку
-		if (data.text) {
-			return data.text;
-		}
-		
-		throw new Error('Неожиданный формат ответа от API. Проверьте формат ответа вашего API.');
 	}
 
 	private getOptimizedParams(textLength: number): { temperature: number; maxTokens: number } {

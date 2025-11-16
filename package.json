@@ -1,6 +1,6 @@
 {
 	"name": "text-enhancer",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Улучшение и структурирование текста с помощью AI",
 	"main": "main.js",
 	"scripts": {

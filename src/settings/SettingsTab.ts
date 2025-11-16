@@ -40,23 +40,28 @@ export class SettingsTab extends PluginSettingTab {
 				dropdown
 					.addOption('openai', 'OpenAI')
 					.addOption('anthropic', 'Anthropic (Claude)')
+					.addOption('ollama', 'Ollama (локальные модели)')
 					.addOption('custom', 'Custom API')
 					.setValue(this.plugin.settings.apiProvider)
-					.onChange(async (value: 'openai' | 'anthropic' | 'custom') => {
+					.onChange(async (value: 'openai' | 'anthropic' | 'ollama' | 'custom') => {
 						this.plugin.settings.apiProvider = value;
 						await this.plugin.saveSettings();
 						this.display(); // Перерисовываем для показа/скрытия дополнительных настроек
 					})
 			);
 
-		// URL API (для custom)
-		if (this.plugin.settings.apiProvider === 'custom') {
+		// URL API (для custom и ollama)
+		if (this.plugin.settings.apiProvider === 'custom' || this.plugin.settings.apiProvider === 'ollama') {
 			new Setting(containerEl)
 				.setName('URL API')
-				.setDesc('URL для вашего кастомного API')
+				.setDesc(this.plugin.settings.apiProvider === 'ollama' 
+					? 'URL для Ollama API (например: http://localhost:11434/v1 или http://77.221.213.237:8000/v1). Плагин автоматически добавит /chat/completions если нужно.\n\n⚠️ ВАЖНО: Для удаленных серверов необходимо настроить CORS на сервере, чтобы разрешить запросы из Obsidian. Или используйте локальный прокси.'
+					: 'URL для вашего кастомного API. Плагин автоматически добавит /chat/completions если нужно.\n\n⚠️ ВАЖНО: Для удаленных серверов необходимо настроить CORS на сервере, чтобы разрешить запросы из Obsidian.')
 				.addText((text) =>
 					text
-						.setPlaceholder('https://api.example.com/v1/chat')
+						.setPlaceholder(this.plugin.settings.apiProvider === 'ollama' 
+							? 'http://localhost:11434/v1'
+							: 'https://api.example.com/v1')
 						.setValue(this.plugin.settings.apiUrl || '')
 						.onChange(async (value) => {
 							this.plugin.settings.apiUrl = value;

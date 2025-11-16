@@ -1,6 +1,6 @@
 export interface PluginSettings {
 	apiKey: string;
-	apiProvider: 'openai' | 'anthropic' | 'custom';
+	apiProvider: 'openai' | 'anthropic' | 'custom' | 'ollama';
 	apiUrl?: string;
 	model: string;
 	temperature: number;
@@ -53,8 +53,17 @@ export interface ChatMessage {
 	isStreaming?: boolean;
 }
 
+export interface Chat {
+	id: string;
+	title: string;
+	messages: ChatMessage[];
+	createdAt: number;
+	updatedAt: number;
+}
+
 export interface ChatSettings {
-	chatHistory: ChatMessage[];
+	chats: Chat[];
+	currentChatId: string | null;
 	maxHistoryLength: number;
 }
 
