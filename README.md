@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Text Enhancer - Расширение для Obsidian
 
 Расширение для Obsidian, которое использует AI для улучшения и структурирования ваших текстов.
@@ -169,3 +170,6 @@ MIT - см. [LICENSE](LICENSE)
 
 - GitHub: [ArsenShkryabin/TextRefaktor-Obsidian](https://github.com/ArsenShkryabin/TextRefaktor-Obsidian)
 - Issues: [Создать issue](https://github.com/ArsenShkryabin/TextRefaktor-Obsidian/issues)
+=======
+# TextRefaktor-Obsidian
+>>>>>>> 1249da4cf9dc651d9cb1368a0eb506a48b6dddd4
