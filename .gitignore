@@ -40,13 +40,29 @@ desktop.ini
 coverage/
 .nyc_output/
 
+# Scripts (keep locally, exclude from repo)
+scripts/
+*.bat
+*.mjs
+!esbuild.config.mjs
+
 # Old documentation files in root (keep only in docs/)
 /INSTALL_WINDOWS.md
 /QUICKSTART.md
-/ARCHITECTURE.md
 /CHANGELOG.md
-/copy-files.mjs
-/copy-to-plugin.bat
+/GIT_INSTRUCTIONS.md
+/QUICK_GIT_PUSH.md
 
-# But allow docs/ folder
-!docs/
+# Git-related documentation (keep locally)
+docs/GIT_FIRST_PUSH.md
+docs/GIT_SETUP.md
+docs/README.md
+
+# But allow docs/ folder and needed files
+!docs/INSTALL_WINDOWS.md
+!docs/ТЕСТИРОВАНИЕ.md
+!docs/ТЕСТИРОВАНИЕ_БЕЗ_API.md
+!docs/ИДЕИ_УЛУЧШЕНИЙ.md
+!docs/ОБНОВЛЕНИЕ.md
+!docs/БЫСТРЫЙ_СТАРТ.md
+!docs/ARCHITECTURE.md
