@@ -46,3 +46,15 @@ export enum EnhancementMode {
 	ENHANCE = 'enhance', // Дополнение мыслями
 }
 
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+	timestamp: number;
+	isStreaming?: boolean;
+}
+
+export interface ChatSettings {
+	chatHistory: ChatMessage[];
+	maxHistoryLength: number;
+}
+

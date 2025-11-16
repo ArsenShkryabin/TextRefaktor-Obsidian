@@ -1,9 +1,29 @@
 /* Стили для Text Enhancer */
 
 .text-enhancer-modal {
-	min-width: 1200px;
-	max-width: 95vw;
+	min-width: 1400px;
+	max-width: 98vw;
 	width: auto;
+	box-sizing: border-box;
+	overflow-x: hidden;
+}
+
+/* Убеждаемся, что модальное окно не выходит за пределы экрана */
+.modal-container {
+	max-width: 98vw !important;
+	overflow-x: hidden !important;
+}
+
+/* Применяем стили к самому модальному окну Obsidian */
+.modal.modal-container {
+	max-width: 98vw !important;
+	overflow-x: hidden !important;
+}
+
+.text-enhancer-modal .modal-content {
+	overflow-x: hidden !important;
+	max-width: 100% !important;
+	box-sizing: border-box;
 }
 
 .text-enhancer-modal .enhancement-header {
@@ -47,6 +67,9 @@
 	margin-top: 15px;
 	justify-content: space-between;
 	align-items: center;
+	width: 100%;
+	box-sizing: border-box;
+	flex-wrap: wrap;
 }
 
 .text-enhancer-modal .enhancement-hint {
@@ -68,10 +91,12 @@
 .text-enhancer-modal .enhancement-container {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: 15px;
+	gap: 20px;
 	min-height: 400px;
-	max-height: 70vh;
+	max-height: 65vh;
 	overflow: hidden;
+	width: 100%;
+	box-sizing: border-box;
 }
 
 .text-enhancer-modal .original-text,
@@ -83,6 +108,9 @@
 	border-radius: 4px;
 	padding: 10px;
 	background: var(--background-secondary);
+	width: 100%;
+	box-sizing: border-box;
+	min-width: 0; /* Позволяет flex элементам сжиматься */
 }
 
 .text-enhancer-modal .original-text {
@@ -110,6 +138,10 @@
 	word-break: break-word;
 	white-space: pre-wrap;
 	overflow-wrap: break-word;
+	width: 100%;
+	box-sizing: border-box;
+	max-width: 100%;
+	min-width: 0;
 }
 
 .text-enhancer-modal .original-text > div:last-child {

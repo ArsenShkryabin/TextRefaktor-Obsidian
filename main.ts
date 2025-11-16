@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, PluginSettings, EnhancementMode, TextHistory } from '
 import { SettingsTab } from './src/settings/SettingsTab';
 import { EnhancementModal } from './src/ui/EnhancementModal';
 import { AIService } from './src/api/AIService';
+import { ChatPanel, CHAT_VIEW_TYPE } from './src/ui/ChatPanel';
 
 export default class TextEnhancerPlugin extends Plugin {
 	settings: PluginSettings;
@@ -12,6 +13,11 @@ export default class TextEnhancerPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		this.aiService = new AIService(this.settings);
+
+		// Регистрируем view для чата
+		this.registerView(CHAT_VIEW_TYPE, (leaf) => {
+			return new ChatPanel(leaf, this.settings, this.aiService);
+		});
 
 		// Добавляем вкладку настроек
 		this.addSettingTab(new SettingsTab(this.app, this));
@@ -60,51 +66,51 @@ export default class TextEnhancerPlugin extends Plugin {
 			},
 		});
 
-		// Регистрируем горячие клавиши из настроек
-		this.registerHotkeys();
+		// Горячие клавиши настраиваются пользователем через настройки Obsidian
+		// Команды уже зарегистрированы выше через addCommand
+
+		// Добавляем иконку для открытия чата
+		this.addRibbonIcon('message-square', 'Открыть AI Чат', () => {
+			this.openChatPanel();
+		});
+
+		// Команда для открытия чата
+		this.addCommand({
+			id: 'open-chat',
+			name: 'Открыть AI Чат',
+			icon: 'message-square',
+			callback: () => {
+				this.openChatPanel();
+			},
+		});
 
 		console.log('Text Enhancer plugin loaded');
 	}
 
-	private hotkeyHandlers: Array<() => void> = [];
+	private async openChatPanel() {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
 
-	private registerHotkeys() {
-		// Удаляем старые обработчики
-		this.hotkeyHandlers.forEach(handler => handler());
-		this.hotkeyHandlers = [];
-
-		// Регистрируем горячую клавишу для улучшения
-		if (this.settings.hotkeyImprove) {
-			const hotkey = this.parseHotkey(this.settings.hotkeyImprove);
-			if (hotkey) {
-				const handler = (this as any).addHotkey(hotkey, () => {
-					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-					if (view && view.editor) {
-						this.enhanceText(view.editor, EnhancementMode.IMPROVE);
-					}
-				});
-				if (handler) {
-					this.hotkeyHandlers.push(handler);
-				}
+		if (!leaf) {
+			const rightLeaf = workspace.getRightLeaf(false);
+			if (rightLeaf) {
+				leaf = rightLeaf;
+				await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
+			} else {
+				// Если нет правого листа, создаем новый
+				leaf = workspace.getLeaf('split', 'vertical');
+				await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
 			}
 		}
 
-		// Регистрируем горячую клавишу для дополнения
-		if (this.settings.hotkeyEnhance) {
-			const hotkey = this.parseHotkey(this.settings.hotkeyEnhance);
-			if (hotkey) {
-				const handler = (this as any).addHotkey(hotkey, () => {
-					const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-					if (view && view.editor) {
-						this.enhanceText(view.editor, EnhancementMode.ENHANCE);
-					}
-				});
-				if (handler) {
-					this.hotkeyHandlers.push(handler);
-				}
-			}
+		if (leaf) {
+			workspace.revealLeaf(leaf);
 		}
 	}
+
+	// Горячие клавиши настраиваются пользователем через стандартный интерфейс Obsidian
+	// Команды уже зарегистрированы через addCommand выше
+	// Пользователь может настроить горячие клавиши в: Настройки → Горячие клавиши → найти команды плагина
 
 	private parseHotkey(hotkey: string): { modifiers: string[], key: string } | null {
 		const parts = hotkey.split('+').map(p => p.trim());
@@ -168,11 +174,14 @@ export default class TextEnhancerPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-		// Перерегистрируем горячие клавиши при сохранении настроек
-		this.registerHotkeys();
+		// Обновляем AI сервис с новыми настройками
+		this.aiService = new AIService(this.settings);
 	}
 
-	onunload() {
+	async onunload() {
+		// Закрываем view чата
+		this.app.workspace.detachLeavesOfType(CHAT_VIEW_TYPE);
+
 		console.log('Text Enhancer plugin unloaded');
 	}
 

@@ -38,6 +38,19 @@ export class EnhancementModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('text-enhancer-modal');
+		
+		// Увеличиваем ширину модального окна и предотвращаем горизонтальную прокрутку
+		this.modalEl.style.width = '98vw';
+		this.modalEl.style.maxWidth = '98vw';
+		this.modalEl.style.minWidth = '1400px';
+		this.modalEl.style.overflowX = 'hidden';
+		this.modalEl.style.boxSizing = 'border-box';
+		
+		// Применяем стили к contentEl
+		contentEl.style.width = '100%';
+		contentEl.style.maxWidth = '100%';
+		contentEl.style.boxSizing = 'border-box';
+		contentEl.style.overflowX = 'hidden';
 
 		// Заголовок с вкладками
 		const header = contentEl.createDiv('enhancement-header');
