@@ -46,8 +46,12 @@ scripts/
 *.mjs
 !esbuild.config.mjs
 
-# Old documentation files in root (keep only in docs/)
+# Duplicate files in root (keep only in docs/ and scripts/)
 /INSTALL_WINDOWS.md
+/copy-files.mjs
+/copy-to-plugin.bat
+
+# Old documentation files in root (keep only in docs/)
 /QUICKSTART.md
 /CHANGELOG.md
 /GIT_INSTRUCTIONS.md
