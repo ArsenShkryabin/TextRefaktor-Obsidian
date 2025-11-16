@@ -138,40 +138,19 @@ export class EnhancementModal extends Modal {
 	private renderComparison() {
 		const { contentEl } = this;
 		const container = contentEl.createDiv('enhancement-container');
-		container.style.display = 'grid';
-		container.style.gridTemplateColumns = '1fr 1fr';
-		container.style.gap = '15px';
-		container.style.minHeight = '400px';
 
 		// Оригинальный текст
 		const originalDiv = container.createDiv('original-text');
-		originalDiv.style.border = '1px solid var(--background-modifier-border)';
-		originalDiv.style.borderRadius = '4px';
-		originalDiv.style.padding = '10px';
-		originalDiv.style.background = 'var(--background-secondary)';
 		
 		const originalLabel = originalDiv.createEl('div', { text: 'Оригинальный текст' });
-		originalLabel.style.fontWeight = 'bold';
-		originalLabel.style.marginBottom = '10px';
 		originalLabel.style.color = 'var(--text-muted)';
 
 		const originalText = originalDiv.createEl('div', { text: this.originalText });
-		originalText.style.whiteSpace = 'pre-wrap';
-		originalText.style.fontFamily = 'var(--font-text)';
-		originalText.style.fontSize = '14px';
-		originalText.style.maxHeight = '350px';
-		originalText.style.overflow = 'auto';
 
 		// Улучшенный текст
 		const enhancedDiv = container.createDiv('enhanced-text');
-		enhancedDiv.style.border = '1px solid var(--background-modifier-border)';
-		enhancedDiv.style.borderRadius = '4px';
-		enhancedDiv.style.padding = '10px';
-		enhancedDiv.style.background = 'var(--background-primary)';
 
 		const enhancedLabel = enhancedDiv.createEl('div', { text: 'Улучшенный текст' });
-		enhancedLabel.style.fontWeight = 'bold';
-		enhancedLabel.style.marginBottom = '10px';
 		enhancedLabel.style.color = 'var(--interactive-accent)';
 
 		this.textArea = enhancedDiv.createEl('textarea', {
@@ -179,13 +158,17 @@ export class EnhancementModal extends Modal {
 			text: this.enhancedText,
 		});
 		this.textArea.style.width = '100%';
-		this.textArea.style.minHeight = '350px';
 		this.textArea.style.padding = '10px';
 		this.textArea.style.fontFamily = 'var(--font-text)';
 		this.textArea.style.fontSize = '14px';
 		this.textArea.style.border = '1px solid var(--background-modifier-border)';
 		this.textArea.style.borderRadius = '4px';
-		this.textArea.style.resize = 'vertical';
+		this.textArea.style.resize = 'none';
+		this.textArea.style.overflowY = 'auto';
+		this.textArea.style.wordWrap = 'break-word';
+		this.textArea.style.wordBreak = 'break-word';
+		this.textArea.style.whiteSpace = 'pre-wrap';
+		this.textArea.style.overflowWrap = 'break-word';
 	}
 
 	private renderButtons() {
