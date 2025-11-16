@@ -40,10 +40,13 @@ desktop.ini
 coverage/
 .nyc_output/
 
-# Old documentation files (keep only in docs/)
-INSTALL_WINDOWS.md
-QUICKSTART.md
-ARCHITECTURE.md
-CHANGELOG.md
-copy-files.mjs
-copy-to-plugin.bat
+# Old documentation files in root (keep only in docs/)
+/INSTALL_WINDOWS.md
+/QUICKSTART.md
+/ARCHITECTURE.md
+/CHANGELOG.md
+/copy-files.mjs
+/copy-to-plugin.bat
+
+# But allow docs/ folder
+!docs/
