@@ -1,0 +1,41 @@
+{
+	"name": "text-enhancer",
+	"version": "1.0.0",
+	"description": "Улучшение и структурирование текста с помощью AI",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production && node scripts/copy-files.mjs",
+		"build:copy": "node scripts/copy-files.mjs",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"text-enhancement",
+		"ai",
+		"openai",
+		"text-improvement"
+	],
+	"author": "ArsenShkryabin",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ArsenShkryabin/TextRefaktor-Obsidian.git"
+	},
+	"bugs": {
+		"url": "https://github.com/ArsenShkryabin/TextRefaktor-Obsidian/issues"
+	},
+	"homepage": "https://github.com/ArsenShkryabin/TextRefaktor-Obsidian#readme",
+	"devDependencies": {
+		"@types/node": "^16.11.6",
+		"@typescript-eslint/eslint-plugin": "5.29.0",
+		"@typescript-eslint/parser": "5.29.0",
+		"builtin-modules": "3.3.0",
+		"esbuild": "0.17.3",
+		"obsidian": "latest",
+		"tslib": "2.4.0",
+		"typescript": "4.7.4"
+	}
+}
+

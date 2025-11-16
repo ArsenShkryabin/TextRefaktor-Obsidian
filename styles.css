@@ -1,0 +1,79 @@
+/* Стили для Text Enhancer */
+
+.text-enhancer-modal {
+	min-width: 800px;
+}
+
+.text-enhancer-modal .enhancement-header {
+	margin-bottom: 15px;
+}
+
+.text-enhancer-modal .view-toggle button {
+	transition: all 0.2s ease;
+}
+
+.text-enhancer-modal .view-toggle button:hover {
+	background: var(--background-modifier-hover) !important;
+}
+
+.text-enhancer-modal .enhancement-container {
+	margin: 20px 0;
+}
+
+.text-enhancer-modal .enhancement-textarea {
+	width: 100%;
+	min-height: 400px;
+	padding: 10px;
+	font-family: var(--font-text);
+	font-size: 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	resize: vertical;
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	line-height: 1.6;
+}
+
+.text-enhancer-modal .enhancement-textarea:focus {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+.text-enhancer-modal .enhancement-buttons {
+	display: flex;
+	gap: 10px;
+	margin-top: 15px;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.text-enhancer-modal .enhancement-hint {
+	margin-top: 10px;
+	font-size: 12px;
+	color: var(--text-muted);
+	line-height: 1.5;
+}
+
+.text-enhancer-modal .enhancement-hint kbd {
+	background: var(--background-modifier-border);
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-family: monospace;
+	font-size: 11px;
+}
+
+/* Стили для режима сравнения */
+.text-enhancer-modal .original-text,
+.text-enhancer-modal .enhanced-text {
+	overflow: auto;
+	max-height: 400px;
+}
+
+.text-enhancer-modal .original-text {
+	border-left: 3px solid var(--text-muted);
+}
+
+.text-enhancer-modal .enhanced-text {
+	border-left: 3px solid var(--interactive-accent);
+}
+

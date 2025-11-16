@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+main.js
+main.js.map
+*.log
+
+# Obsidian
+.obsidian/
+
+# Compiled plugin files (for distribution)
+plugin-files/main.js
+plugin-files/manifest.json
+plugin-files/styles.css
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Environment variables
+.env
+.env.local
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Old documentation files (keep only in docs/)
+INSTALL_WINDOWS.md
+QUICKSTART.md
+ARCHITECTURE.md
+CHANGELOG.md
+copy-files.mjs
+copy-to-plugin.bat

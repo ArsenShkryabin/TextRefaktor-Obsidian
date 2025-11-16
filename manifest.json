@@ -1,0 +1,12 @@
+{
+	"id": "text-enhancer",
+	"name": "Text Enhancer",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Улучшение и структурирование текста с помощью AI",
+	"author": "ArsenShkryabin",
+	"authorUrl": "https://github.com/ArsenShkryabin",
+	"fundingUrl": "",
+	"isDesktopOnly": false
+}
+
