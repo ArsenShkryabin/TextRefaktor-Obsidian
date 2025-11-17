@@ -1001,15 +1001,106 @@ export class ChatPanel extends ItemView {
 			? historyMessages
 			: [...historyMessages, { role: 'user' as const, content: prompt }];
 
+		// Проверяем, включен ли fallback
+		const useFallback = this.settings.enableFallback && 
+			this.settings.fallbackProvider !== 'none' && 
+			this.settings.fallbackApiKey &&
+			(this.settings.fallbackProvider === 'openai' || 
+			 (this.settings.fallbackProvider === 'custom' || this.settings.fallbackProvider === 'ollama') && this.settings.fallbackApiUrl);
+
 		let response: Response;
+		let usedFallback = false;
+		let fallbackTimeoutId: number | null = null;
+		
 		try {
 			// Логируем запрос для отладки
 			console.debug('Отправка запроса к API:', {
 				url: apiUrl,
 				provider: this.settings.apiProvider,
 				model: this.settings.model,
-				hasKey: !!this.settings.apiKey
+				hasKey: !!this.settings.apiKey,
+				useFallback
 			});
+
+			// Если включен fallback, запускаем таймер для переключения
+			if (useFallback) {
+				const timeout = this.settings.fallbackTimeout || 120000;
+				fallbackTimeoutId = window.setTimeout(() => {
+					// Используем немедленный вызов async функции
+					(async () => {
+						console.warn(`Основной провайдер не ответил в течение ${timeout}мс, переключаемся на fallback`);
+						try {
+							// Нормализуем URL для fallback
+							const normalizeApiUrl = (url: string | undefined, provider: string): string => {
+								if (!url) {
+									throw new Error('Для fallback провайдера необходимо указать URL');
+								}
+								url = url.trim().replace(/\/$/, '');
+								if (!url.includes('/chat/completions')) {
+									if (url.endsWith('/v1')) {
+										url = url + '/chat/completions';
+									} else if (!url.includes('/v1/')) {
+										url = url + '/v1/chat/completions';
+									} else {
+										url = url + '/chat/completions';
+									}
+								}
+								return url;
+							};
+
+							const fallbackUrl = normalizeApiUrl(this.settings.fallbackApiUrl, this.settings.fallbackProvider);
+							
+							// Делаем обычный запрос (без streaming) к fallback провайдеру
+							const fallbackResponse = await fetch(fallbackUrl, {
+								method: 'POST',
+								headers: {
+									'Content-Type': 'application/json',
+									'Authorization': `Bearer ${this.settings.fallbackApiKey}`,
+								},
+								body: JSON.stringify({
+									model: this.settings.model,
+									messages,
+									temperature: this.settings.temperature,
+									max_tokens: this.settings.maxTokens,
+								}),
+							});
+
+							if (fallbackResponse.ok) {
+								const fallbackData = await fallbackResponse.json();
+								let content = '';
+								if (fallbackData.choices && fallbackData.choices[0]?.message?.content) {
+									content = fallbackData.choices[0].message.content;
+								} else if (fallbackData.content) {
+									content = fallbackData.content;
+								} else if (fallbackData.text) {
+									content = fallbackData.text;
+								}
+
+								if (content) {
+									usedFallback = true;
+									// Имитируем streaming для fallback ответа
+									let currentText = '';
+									const chunkSize = 3;
+									for (let i = 0; i < content.length; i += chunkSize) {
+										currentText = content.slice(0, i + chunkSize);
+										await new Promise(resolve => {
+											requestAnimationFrame(() => {
+												onChunk(currentText, false);
+												setTimeout(resolve, 15);
+											});
+										});
+									}
+									onChunk(content, true);
+									return; // Завершаем выполнение
+								}
+							}
+						} catch (fallbackError) {
+							console.error('Ошибка при использовании fallback провайдера:', fallbackError);
+							// Продолжаем с основным провайдером
+						}
+					})();
+				}, timeout);
+			}
 
 			response = await fetch(apiUrl, {
 				method: 'POST',
@@ -1026,15 +1117,99 @@ export class ChatPanel extends ItemView {
 				}),
 			});
 
+			// Если получили ответ от основного провайдера, отменяем таймер fallback
+			if (fallbackTimeoutId !== null) {
+				clearTimeout(fallbackTimeoutId);
+				fallbackTimeoutId = null;
+			}
+
 			console.debug('Ответ от API:', {
 				status: response.status,
 				statusText: response.statusText,
-				ok: response.ok
+				ok: response.ok,
+				usedFallback
 			});
 		} catch (error) {
+			// Отменяем таймер fallback если он был установлен
+			if (fallbackTimeoutId !== null) {
+				clearTimeout(fallbackTimeoutId);
+				fallbackTimeoutId = null;
+			}
+
+			// Если fallback уже использован, не пробрасываем ошибку
+			if (usedFallback) {
+				return;
+			}
+
 			// Улучшенная обработка ошибок для диагностики
 			console.error('Ошибка при запросе к API:', error);
 			if (error instanceof TypeError && error.message.includes('fetch')) {
+				// Если включен fallback, пробуем его
+				if (useFallback && !usedFallback) {
+					try {
+						const normalizeApiUrl = (url: string | undefined, provider: string): string => {
+							if (!url) throw new Error('Для fallback провайдера необходимо указать URL');
+							url = url.trim().replace(/\/$/, '');
+							if (!url.includes('/chat/completions')) {
+								if (url.endsWith('/v1')) {
+									url = url + '/chat/completions';
+								} else if (!url.includes('/v1/')) {
+									url = url + '/v1/chat/completions';
+								} else {
+									url = url + '/chat/completions';
+								}
+							}
+							return url;
+						};
+
+						const fallbackUrl = normalizeApiUrl(this.settings.fallbackApiUrl, this.settings.fallbackProvider);
+						const fallbackResponse = await fetch(fallbackUrl, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								'Authorization': `Bearer ${this.settings.fallbackApiKey}`,
+							},
+							body: JSON.stringify({
+								model: this.settings.fallbackModel || this.settings.model,
+								messages,
+								temperature: this.settings.temperature,
+								max_tokens: this.settings.maxTokens,
+							}),
+						});
+
+						if (fallbackResponse.ok) {
+							const fallbackData = await fallbackResponse.json();
+							let content = '';
+							if (fallbackData.choices && fallbackData.choices[0]?.message?.content) {
+								content = fallbackData.choices[0].message.content;
+							} else if (fallbackData.content) {
+								content = fallbackData.content;
+							} else if (fallbackData.text) {
+								content = fallbackData.text;
+							}
+
+							if (content) {
+								usedFallback = true;
+								// Имитируем streaming для fallback ответа
+								let currentText = '';
+								const chunkSize = 3;
+								for (let i = 0; i < content.length; i += chunkSize) {
+									currentText = content.slice(0, i + chunkSize);
+									await new Promise(resolve => {
+										requestAnimationFrame(() => {
+											onChunk(currentText, false);
+											setTimeout(resolve, 15);
+										});
+									});
+								}
+								onChunk(content, true);
+								return;
+							}
+						}
+					} catch (fallbackError) {
+						console.error('Fallback провайдер также не сработал:', fallbackError);
+					}
+				}
 				throw new Error(`Ошибка подключения: Не удалось подключиться к ${apiUrl}. Проверьте:\n1. Правильность URL\n2. Доступность сервера\n3. Настройки CORS (если используется удаленный сервер)\n4. Сетевое подключение`);
 			}
 			throw error;

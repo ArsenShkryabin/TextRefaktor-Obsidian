@@ -144,12 +144,114 @@ export class SettingsTab extends PluginSettingTab {
 					});
 			});
 
+		// Fallback провайдер (параллельная работа)
+		containerEl.createEl('h3', { text: 'Резервный провайдер (Fallback)' });
+		
+		new Setting(containerEl)
+			.setName('Включить резервный провайдер')
+			.setDesc('Если основной провайдер долго отвечает или недоступен, автоматически переключится на резервный. Полезно для комбинации Custom API + Ollama.')
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.enableFallback)
+					.onChange(async (value) => {
+						this.plugin.settings.enableFallback = value;
+						await this.plugin.saveSettings();
+						this.display(); // Перерисовываем для показа/скрытия настроек fallback
+					});
+			});
+
+		if (this.plugin.settings.enableFallback) {
+			// Провайдер fallback
+			new Setting(containerEl)
+				.setName('Резервный провайдер')
+				.setDesc('Выберите резервный провайдер AI')
+				.addDropdown((dropdown) =>
+					dropdown
+						.addOption('none', 'Не выбран')
+						.addOption('openai', 'OpenAI')
+						.addOption('ollama', 'Ollama (локальные модели)')
+						.addOption('custom', 'Custom API')
+						.setValue(this.plugin.settings.fallbackProvider)
+						.onChange(async (value: 'openai' | 'anthropic' | 'ollama' | 'custom' | 'none') => {
+							this.plugin.settings.fallbackProvider = value;
+							await this.plugin.saveSettings();
+							this.display(); // Перерисовываем для показа/скрытия URL
+						})
+				);
+
+			// URL для fallback (для custom и ollama)
+			if (this.plugin.settings.fallbackProvider === 'custom' || this.plugin.settings.fallbackProvider === 'ollama') {
+				new Setting(containerEl)
+					.setName('URL резервного API')
+					.setDesc(this.plugin.settings.fallbackProvider === 'ollama' 
+						? 'URL для резервного Ollama API (например: http://localhost:11434/v1 или http://77.221.213.237:8000/v1)'
+						: 'URL для резервного кастомного API')
+					.addText((text) =>
+						text
+							.setPlaceholder(this.plugin.settings.fallbackProvider === 'ollama' 
+								? 'http://localhost:11434/v1'
+								: 'https://api.example.com/v1')
+							.setValue(this.plugin.settings.fallbackApiUrl || '')
+							.onChange(async (value) => {
+								this.plugin.settings.fallbackApiUrl = value;
+								await this.plugin.saveSettings();
+							})
+					);
+			}
+
+			// API ключ для fallback
+			new Setting(containerEl)
+				.setName('API ключ резервного провайдера')
+				.setDesc('API ключ для резервного провайдера (может отличаться от основного)')
+				.addText((text) =>
+					text
+						.setPlaceholder('sk-...')
+						.setValue(this.plugin.settings.fallbackApiKey || '')
+						.onChange(async (value) => {
+							this.plugin.settings.fallbackApiKey = value;
+							await this.plugin.saveSettings();
+						})
+				);
+
+			// Модель для fallback
+			new Setting(containerEl)
+				.setName('Модель резервного провайдера')
+				.setDesc('Название модели для резервного провайдера (например: hermes:latest для Ollama или gpt-4o-mini для OpenAI). Если не указано, используется модель основного провайдера.')
+				.addText((text) =>
+					text
+						.setPlaceholder('hermes:latest')
+						.setValue(this.plugin.settings.fallbackModel || '')
+						.onChange(async (value) => {
+							this.plugin.settings.fallbackModel = value || undefined;
+							await this.plugin.saveSettings();
+						})
+				);
+
+			// Таймаут для переключения
+			new Setting(containerEl)
+				.setName('Таймаут переключения (мс)')
+				.setDesc('Время ожидания ответа от основного провайдера перед переключением на резервный (по умолчанию: 120000мс = 2 минуты)')
+				.addText((text) =>
+					text
+						.setPlaceholder('120000')
+						.setValue(this.plugin.settings.fallbackTimeout?.toString() || '120000')
+						.onChange(async (value) => {
+							const numValue = parseInt(value);
+							if (!isNaN(numValue) && numValue > 0) {
+								this.plugin.settings.fallbackTimeout = numValue;
+								await this.plugin.saveSettings();
+							}
+						})
+				);
+		}
+
 		// Тест API
 		new Setting(containerEl)
 			.setName('Тест API')
 			.setDesc(this.plugin.settings.testMode 
 				? '⚠️ Тестовый режим активен - будет показан мок-ответ' 
-				: 'Проверьте подключение к API')
+				: this.plugin.settings.enableFallback && this.plugin.settings.fallbackProvider !== 'none'
+					? 'Проверьте подключение к основному и резервному API'
+					: 'Проверьте подключение к API')
 			.addButton((button) => {
 				button.setButtonText('Тестировать')
 					.setCta()
@@ -159,11 +261,38 @@ export class SettingsTab extends PluginSettingTab {
 						
 						try {
 							const aiService = new AIService(this.plugin.settings);
-							await aiService.testAPI();
+							const results = await aiService.testAPI();
+							
 							if (this.plugin.settings.testMode || !this.plugin.settings.apiKey) {
 								new Notice('✅ Тестовый режим: проверка прошла успешно!', 3000);
 							} else {
-								new Notice('✅ API ключ работает!', 3000);
+								// Формируем сообщение с результатами
+								const providerName = this.plugin.settings.apiProvider === 'ollama' ? 'Ollama' 
+									: this.plugin.settings.apiProvider === 'custom' ? 'Custom API'
+									: this.plugin.settings.apiProvider === 'openai' ? 'OpenAI'
+									: this.plugin.settings.apiProvider;
+								
+								let message = '';
+								if (results.primary) {
+									message = `✅ Основной API (${providerName}): работает`;
+								} else {
+									message = `❌ Основной API (${providerName}): ${results.primaryError || 'ошибка'}`;
+								}
+								
+								if (results.fallback !== undefined) {
+									const fallbackProviderName = this.plugin.settings.fallbackProvider === 'ollama' ? 'Ollama' 
+										: this.plugin.settings.fallbackProvider === 'custom' ? 'Custom API'
+										: this.plugin.settings.fallbackProvider === 'openai' ? 'OpenAI'
+										: this.plugin.settings.fallbackProvider;
+									
+									if (results.fallback) {
+										message += `\n✅ Резервный API (${fallbackProviderName}): работает`;
+									} else {
+										message += `\n❌ Резервный API (${fallbackProviderName}): ${results.fallbackError || 'ошибка'}`;
+									}
+								}
+								
+								new Notice(message, 6000);
 							}
 						} catch (error) {
 							const errorMessage = error instanceof Error ? error.message : 'Неизвестная ошибка';

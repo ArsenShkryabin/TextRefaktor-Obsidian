@@ -116,12 +116,12 @@ export class AIService {
 		return formatted.trim();
 	}
 
-	async testAPI(): Promise<boolean> {
+	async testAPI(): Promise<{primary: boolean, fallback?: boolean, primaryError?: string, fallbackError?: string}> {
 		// В тестовом режиме всегда возвращаем успех
 		if (this.settings.testMode || !this.settings.apiKey) {
-			return new Promise<boolean>((resolve) => {
+			return new Promise<{primary: boolean, fallback?: boolean}>(resolve => {
 				setTimeout(() => {
-					resolve(true);
+					resolve({ primary: true });
 				}, 500);
 			});
 		}
@@ -135,13 +135,41 @@ export class AIService {
 			throw new Error(`Для ${this.settings.apiProvider === 'ollama' ? 'Ollama' : 'Custom API'} необходимо указать URL`);
 		}
 
+		const testPrompt = 'Ответь одним словом: "OK"';
+		const results: {primary: boolean, fallback?: boolean, primaryError?: string, fallbackError?: string} = { primary: false };
+
+		// Тестируем основной API
 		try {
-			const testPrompt = 'Ответь одним словом: "OK"';
-			const response = await this.callOpenAI(testPrompt);
-			return response.trim().toLowerCase().includes('ok');
+			const response = await this.callAPI(testPrompt, undefined, this.settings.apiProvider, this.settings.apiUrl, this.settings.apiKey);
+			results.primary = response.trim().toLowerCase().includes('ok');
 		} catch (error) {
-			throw error;
+			results.primary = false;
+			results.primaryError = error instanceof Error ? error.message : 'Неизвестная ошибка';
 		}
+
+		// Тестируем fallback API, если он включен
+		if (this.settings.enableFallback && 
+			this.settings.fallbackProvider !== 'none' && 
+			this.settings.fallbackApiKey &&
+			(this.settings.fallbackProvider === 'openai' || 
+			 (this.settings.fallbackProvider === 'custom' || this.settings.fallbackProvider === 'ollama') && this.settings.fallbackApiUrl)) {
+			try {
+				const fallbackResponse = await this.callAPI(
+					testPrompt, 
+					undefined, 
+					this.settings.fallbackProvider as 'openai' | 'anthropic' | 'custom' | 'ollama', 
+					this.settings.fallbackApiUrl, 
+					this.settings.fallbackApiKey,
+					this.settings.fallbackModel
+				);
+				results.fallback = fallbackResponse.trim().toLowerCase().includes('ok');
+			} catch (error) {
+				results.fallback = false;
+				results.fallbackError = error instanceof Error ? error.message : 'Неизвестная ошибка';
+			}
+		}
+
+		return results;
 	}
 
 	private buildPrompt(text: string, mode: EnhancementMode): string {
@@ -213,59 +241,187 @@ export class AIService {
 		// Убираем завершающий слэш
 		url = url.trim().replace(/\/$/, '');
 
+		// Проверяем, содержит ли URL уже /chat/completions или /completions
+		if (url.includes('/chat/completions')) {
+			// Уже содержит правильный путь
+			return url;
+		}
+
+		// Если содержит /completions (но не /chat/completions), заменяем
+		if (url.includes('/completions') && !url.includes('/chat/completions')) {
+			url = url.replace('/completions', '/chat/completions');
+			return url;
+		}
+
 		// Если URL не содержит /chat/completions, добавляем его
-		if (!url.includes('/chat/completions')) {
-			// Если URL заканчивается на /v1, добавляем /chat/completions
-			if (url.endsWith('/v1')) {
-				url = url + '/chat/completions';
-			} else if (!url.includes('/v1/')) {
-				// Если нет /v1/, добавляем /v1/chat/completions
-				url = url + '/v1/chat/completions';
-			} else {
-				// Если есть /v1/, но нет /chat/completions, добавляем
-				url = url + '/chat/completions';
-			}
+		// Если URL заканчивается на /v1, добавляем /chat/completions
+		if (url.endsWith('/v1')) {
+			url = url + '/chat/completions';
+		} else if (url.includes('/v1/') && !url.includes('/chat/completions')) {
+			// Если есть /v1/, но нет /chat/completions, добавляем
+			url = url + '/chat/completions';
+		} else if (!url.includes('/v1')) {
+			// Если нет /v1/, добавляем /v1/chat/completions
+			url = url + '/v1/chat/completions';
 		}
 
 		return url;
 	}
 
+	/**
+	 * Выполняет запрос с поддержкой fallback провайдера
+	 * Если включен fallback и основной провайдер не отвечает в течение таймаута,
+	 * автоматически переключается на fallback провайдер
+	 */
+	async callWithFallback(prompt: string, messages?: Array<{role: string, content: string}>): Promise<{response: string, provider: string, usedFallback: boolean}> {
+		// Если fallback не включен, используем обычный запрос
+		if (!this.settings.enableFallback || this.settings.fallbackProvider === 'none') {
+			const response = await this.callAPI(prompt, messages, this.settings.apiProvider, this.settings.apiUrl, this.settings.apiKey);
+			return { response, provider: this.settings.apiProvider, usedFallback: false };
+		}
+
+		// Проверяем наличие fallback настроек
+		if (!this.settings.fallbackApiKey) {
+			console.warn('Fallback включен, но API ключ не указан. Используется основной провайдер.');
+			const response = await this.callAPI(prompt, messages, this.settings.apiProvider, this.settings.apiUrl, this.settings.apiKey);
+			return { response, provider: this.settings.apiProvider, usedFallback: false };
+		}
+
+		// Для custom и ollama fallback провайдеров проверяем наличие URL
+		if ((this.settings.fallbackProvider === 'custom' || this.settings.fallbackProvider === 'ollama') && !this.settings.fallbackApiUrl) {
+			console.warn('Fallback включен, но URL не указан. Используется основной провайдер.');
+			const response = await this.callAPI(prompt, messages, this.settings.apiProvider, this.settings.apiUrl, this.settings.apiKey);
+			return { response, provider: this.settings.apiProvider, usedFallback: false };
+		}
+
+		// Запускаем параллельные запросы
+		const timeout = this.settings.fallbackTimeout || 120000;
+		
+		const primaryRequest = this.callAPI(
+			prompt, 
+			messages, 
+			this.settings.apiProvider, 
+			this.settings.apiUrl, 
+			this.settings.apiKey,
+			undefined // Используем основную модель
+		).then(response => ({ response, provider: this.settings.apiProvider, usedFallback: false }));
+
+		const fallbackRequest = new Promise<{response: string, provider: string, usedFallback: boolean}>(resolve => {
+			setTimeout(async () => {
+				try {
+					if (this.settings.fallbackProvider !== 'none') {
+						const response = await this.callAPI(
+							prompt, 
+							messages, 
+							this.settings.fallbackProvider as 'openai' | 'anthropic' | 'custom' | 'ollama', 
+							this.settings.fallbackApiUrl, 
+							this.settings.fallbackApiKey,
+							this.settings.fallbackModel // Используем модель fallback
+						);
+						resolve({ response, provider: this.settings.fallbackProvider, usedFallback: true });
+					} else {
+						resolve({ response: '', provider: 'none', usedFallback: false });
+					}
+				} catch (error) {
+					// Если fallback тоже не сработал, пробрасываем ошибку
+					resolve({ response: '', provider: this.settings.fallbackProvider, usedFallback: true });
+				}
+			}, timeout);
+		});
+
+		// Используем Promise.race для получения первого успешного ответа
+		try {
+			// Обрабатываем fallback request, чтобы он всегда возвращал валидный результат
+			const processedFallbackRequest = fallbackRequest.then(async result => {
+				if (!result.response || result.response === '') {
+					// Fallback не дал ответ, ждем основной
+					return await primaryRequest;
+				}
+				return result;
+			});
+			
+			const result = await Promise.race([
+				primaryRequest,
+				processedFallbackRequest
+			]);
+			
+			// Если основной запрос еще не завершился, отменяем его (хотя мы не можем реально отменить fetch)
+			// Но это нормально, запрос просто завершится в фоне
+			
+			return result;
+		} catch (error) {
+			// Если основной запрос упал, пробуем fallback
+			// В этом месте fallbackProvider уже не может быть 'none', так как мы проверили это в начале функции
+			try {
+				const fallbackResult = await this.callAPI(
+					prompt, 
+					messages, 
+					this.settings.fallbackProvider as 'openai' | 'anthropic' | 'custom' | 'ollama', 
+					this.settings.fallbackApiUrl, 
+					this.settings.fallbackApiKey,
+					this.settings.fallbackModel // Используем модель fallback
+				);
+				return { response: fallbackResult, provider: this.settings.fallbackProvider, usedFallback: true };
+			} catch (fallbackError) {
+				// Оба провайдера не сработали
+				throw error; // Пробрасываем ошибку основного провайдера
+			}
+		}
+	}
+
 	private async callOpenAI(prompt: string): Promise<string> {
-		if (!this.settings.apiKey) {
+		const result = await this.callWithFallback(prompt);
+		return result.response;
+	}
+
+	/**
+	 * Базовый метод для вызова API
+	 */
+	private async callAPI(
+		prompt: string, 
+		messages?: Array<{role: string, content: string}>,
+		provider?: 'openai' | 'anthropic' | 'custom' | 'ollama',
+		apiUrl?: string,
+		apiKey?: string,
+		model?: string
+	): Promise<string> {
+		const actualProvider = provider || this.settings.apiProvider;
+		const actualApiKey = apiKey || this.settings.apiKey;
+		const actualApiUrl = apiUrl || this.settings.apiUrl;
+
+		if (!actualApiKey) {
 			throw new Error('API ключ не установлен. Пожалуйста, настройте его в настройках плагина.');
 		}
 
 		// Для custom и ollama провайдеров проверяем наличие URL
-		if ((this.settings.apiProvider === 'custom' || this.settings.apiProvider === 'ollama') && !this.settings.apiUrl) {
-			throw new Error(`Для ${this.settings.apiProvider === 'ollama' ? 'Ollama' : 'Custom API'} необходимо указать URL. Пожалуйста, настройте его в настройках плагина.`);
+		if ((actualProvider === 'custom' || actualProvider === 'ollama') && !actualApiUrl) {
+			throw new Error(`Для ${actualProvider === 'ollama' ? 'Ollama' : 'Custom API'} необходимо указать URL. Пожалуйста, настройте его в настройках плагина.`);
 		}
 
 		// Нормализуем URL (добавляем /chat/completions если нужно)
-		const apiUrl = this.normalizeApiUrl(
-			this.settings.apiProvider === 'custom' || this.settings.apiProvider === 'ollama'
-				? this.settings.apiUrl
-				: this.settings.apiUrl,
-			this.settings.apiProvider
-		);
+		const normalizedUrl = this.normalizeApiUrl(actualApiUrl, actualProvider);
 
 		// Оптимизация параметров в зависимости от режима скорости
 		const optimizedParams = this.getOptimizedParams(prompt.length);
 
+		// Формируем сообщения
+		const requestMessages = messages || [
+			{
+				role: 'user',
+				content: prompt,
+			},
+		];
+
 		try {
-			const response = await fetch(apiUrl, {
+			const response = await fetch(normalizedUrl, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${this.settings.apiKey}`,
+					'Authorization': `Bearer ${actualApiKey}`,
 				},
 				body: JSON.stringify({
-					model: this.settings.model,
-					messages: [
-						{
-							role: 'user',
-							content: prompt,
-						},
-					],
+					model: model || this.settings.model,
+					messages: requestMessages,
 					temperature: optimizedParams.temperature,
 					max_tokens: optimizedParams.maxTokens,
 				}),
@@ -303,7 +459,7 @@ export class AIService {
 		} catch (error) {
 			// Улучшенная обработка ошибок для диагностики
 			if (error instanceof TypeError && error.message.includes('fetch')) {
-				throw new Error(`Ошибка подключения: Не удалось подключиться к ${apiUrl}. Проверьте:\n1. Правильность URL\n2. Доступность сервера\n3. Настройки CORS (если используется удаленный сервер)\n4. Сетевое подключение`);
+				throw new Error(`Ошибка подключения: Не удалось подключиться к ${normalizedUrl}. Проверьте:\n1. Правильность URL\n2. Доступность сервера\n3. Настройки CORS (если используется удаленный сервер)\n4. Сетевое подключение`);
 			}
 			throw error;
 		}
